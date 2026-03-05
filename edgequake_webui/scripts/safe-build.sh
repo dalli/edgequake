@@ -28,6 +28,20 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Define a timeout function that works on macOS and Linux
+run_with_timeout() {
+    local timeout_val=$1
+    shift
+    if command -v timeout &> /dev/null; then
+        timeout "$timeout_val" "$@"
+    elif command -v gtimeout &> /dev/null; then
+        gtimeout "$timeout_val" "$@"
+    else
+        # Fallback: run without timeout if neither is available
+        "$@"
+    fi
+}
+
 log() {
     echo -e "${BLUE}[$(date '+%H:%M:%S')]${NC} $1"
 }
@@ -74,7 +88,7 @@ run_typecheck() {
     cd "$PROJECT_DIR"
     
     # Run tsc with timeout
-    if timeout 60 npx tsc --noEmit; then
+    if run_with_timeout 60 npx tsc --noEmit; then
         success "TypeScript check passed"
         return 0
     else
@@ -91,7 +105,7 @@ run_build() {
     export NODE_OPTIONS="--max-old-space-size=4096"
     
     # Run with nice (low priority) and timeout
-    if nice -n 10 timeout $MAX_BUILD_TIME npx next build 2>&1 | tee "$LOG_FILE"; then
+    if nice -n 10 run_with_timeout $MAX_BUILD_TIME npx next build 2>&1 | tee "$LOG_FILE"; then
         success "Build completed successfully!"
         return 0
     else

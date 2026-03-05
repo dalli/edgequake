@@ -16,10 +16,12 @@ import { initReactI18next } from "react-i18next";
 
 import en from "@/locales/en.json";
 import fr from "@/locales/fr.json";
+import ko from "@/locales/kr.json";
 import zh from "@/locales/zh.json";
 
 export const languages = [
   { code: "en", name: "English", nativeName: "English" },
+  { code: "ko", name: "Korean", nativeName: "한국어" },
   { code: "zh", name: "Chinese", nativeName: "中文" },
   { code: "fr", name: "French", nativeName: "Français" },
 ] as const;
@@ -34,6 +36,7 @@ i18n
       en: { translation: en },
       zh: { translation: zh },
       fr: { translation: fr },
+      ko: { translation: ko },
     },
     fallbackLng: "en",
     interpolation: {

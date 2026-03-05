@@ -431,7 +431,7 @@ impl QueryEngine {
 {query}
 
 ## Answer
-Provide a clear, accurate answer based on the context above. If the context doesn't contain enough information to answer the question, say so."#,
+Provide a clear, accurate answer based on the context above. If the context doesn't contain enough information to answer the question, say so. You MUST ALWAYS respond in KOREAN (한국어)."#,
             context_text = context_text,
             query = request.query
         );
@@ -617,7 +617,7 @@ Provide a clear, accurate answer based on the context above. If the context does
 {query}
 
 ## Answer
-Provide a clear, accurate answer based on the context above. If the context doesn't contain enough information to answer the question, say so."#
+Provide a clear, accurate answer based on the context above. If the context doesn't contain enough information to answer the question, say so. You MUST ALWAYS respond in KOREAN (한국어)."#
         )
     }
 
@@ -643,7 +643,7 @@ Provide a clear, accurate answer based on the context above. If the context does
 {query}
 
 ## Answer
-Provide a clear, accurate answer based on the context above. If the context doesn't contain enough information to answer the question, say so."#
+Provide a clear, accurate answer based on the context above. If the context doesn't contain enough information to answer the question, say so. You MUST ALWAYS respond in KOREAN (한국어)."#
         );
 
         let response = self.llm_provider.complete(&prompt).await?;

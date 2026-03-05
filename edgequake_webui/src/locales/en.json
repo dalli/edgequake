@@ -429,7 +429,25 @@
       "favorites": "Favorites",
       "noHistory": "No query history",
       "clear": "Clear History"
-    }
+    },
+    "suggestions": {
+      "0": "What are the main entities in my knowledge graph?",
+      "1": "Summarize the key relationships between documents",
+      "2": "Find connections between people and organizations",
+      "3": "What topics are covered in my documents?"
+    },
+    "emptyTitle": "Ask about your knowledge graph",
+    "emptyDescription": "I can help you explore entities, find connections, and uncover insights from your documents.",
+    "tryAsking": "Try asking:",
+    "suggestedQueries": "Suggested queries",
+    "conversationExpired": "Previous conversation not available",
+    "startingFreshSession": "Starting a fresh session.",
+    "conversationCleared": "New conversation started",
+    "conversationClearedDesc": "Context has changed. Starting a fresh conversation.",
+    "startingNewConversation": "Starting a new conversation. Please submit your query again.",
+    "stop": "Stop",
+    "hint": "Press Enter to send, Shift+Enter for new line",
+    "newConversation": "New"
   },
   "pipeline": {
     "title": "Pipeline Status",

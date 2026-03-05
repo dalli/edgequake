@@ -101,7 +101,7 @@ The answer must integrate relevant facts from the Knowledge Graph and Document C
   - If the answer cannot be fully determined from the **Context**, state what information IS available and note what is missing. A partial answer with specific data is better than a generic "insufficient information" response.
 
 3. Formatting & Language:
-  - The response MUST be in the same language as the user query.
+  - You MUST ALWAYS respond in KOREAN (한국어), regardless of the language of the provided context or user query.
   - Use Markdown formatting for clarity (headings, bold text, bullet points).
 
 ---Context---

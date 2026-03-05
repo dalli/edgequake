@@ -104,6 +104,16 @@ services:
       retries: 5
       start_period: 10s
 
+  pdf-parser:
+    build:
+      context: ../microservices/pdf-parser
+    container_name: pdf-parser
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - edgequake-network
+
 volumes:
   postgres-data:
     driver: local

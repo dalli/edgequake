@@ -2,53 +2,64 @@
 
 This directory contains Docker configuration for deploying EdgeQuake.
 
-## ⚠️ Disclaimer
+## PDF Parsing Microservice (Two-Track VLM)
 
-**PDF to Markdown Integration Status**: The PDF-to-Markdown feature is currently integrated in an **early prototype** stage. For testing and evaluating EdgeQuake's core functionality, please use **markdown documents** rather than PDFs. This ensures you can fully leverage the stable features of the system while we continue to refine the PDF extraction pipeline.
+> **Important Setup Note**: EdgeQuake uses a dedicated `pdf-parser` microservice to extract highly complex structures (merging multi-page tables, recognizing rowspans) and analyze charts via Vision Language Models (Qwen2-VL). 
+> 
+> * **Hardware requirements:** The `pdf-parser` container utilizes GPU acceleration. To run the Qwen2-VL model locally, ensure your host environment has at least 16GB-24GB of VRAM and the NVIDIA Container Toolkit is installed.
 
 ## Quick Start
 
 ```bash
-# Build and start all services
+# Build and start all services via Makefile
+make docker-up
+
+# Alternatively, using docker-compose directly
 docker-compose up -d
 
 # View logs
-docker-compose logs -f edgequake
-
-# Stop services
-docker-compose down
+make docker-logs
 ```
 
 ## Services
 
-| Service     | Port | Description              |
-| ----------- | ---- | ------------------------ |
-| `edgequake` | 8080 | EdgeQuake API server     |
-| `postgres`  | 5432 | PostgreSQL with pgvector |
+| Service | Port | Description |
+|---|---|---|
+| `edgequake` | 8080 | EdgeQuake API server |
+| `frontend` | 3000 | Next.js Frontend |
+| `pdf-parser` | 8000 | FastAPI + Docling + vLLM PDF parser pipeline |
+| `postgres` | 5432 | PostgreSQL with pgvector |
 
 ## Environment Variables
 
-Create a `.env` file:
+Create a `.env` file in the root project directory:
 
 ```bash
 # Required
 OPENAI_API_KEY=sk-your-api-key
 
-# Optional
+# Optional API config
 EDGEQUAKE_PORT=8080
 POSTGRES_PASSWORD=edgequake_secret
+
+# PDF Parser Optional Config
+VLM_MODEL_NAME=Qwen/Qwen2-VL-7B-Instruct
+```
+
+## Managing PDF-Parser Specifically
+
+If you want to only interact with the PDF parsing module:
+
+```bash
+make docker-pdf-parser-build  # Build the base CUDA dependencies
+make docker-pdf-parser-up     # Spin up the single microservice
+make docker-pdf-parser-logs   # Monitor VLM and layout extraction logs
 ```
 
 ## Production Deployment
 
-For production, use `docker-compose.prod.yml`:
+For production, you may adapt `docker-compose.prod.yml` to fit your orchestration tool, ensuring the `deploy.resources.reservations.devices.capabilities: [gpu]` parameter is preserved for the `pdf-parser` service.
 
 ```bash
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
-## Building the Image
-
-```bash
-docker build -t edgequake:latest -f Dockerfile ..
 ```

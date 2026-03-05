@@ -260,6 +260,9 @@ help: ## Show this help message
 	@echo "  $(GREEN)make docker-build$(RESET) Rebuild Docker images"
 	@echo "  $(GREEN)make docker-logs$(RESET)  View Docker logs"
 	@echo "  $(GREEN)make docker-ps$(RESET)    Show Docker container status"
+	@echo "  $(GREEN)make docker-pdf-parser-build$(RESET) Build pdf-parser container"
+	@echo "  $(GREEN)make docker-pdf-parser-up$(RESET) Start pdf-parser container"
+	@echo "  $(GREEN)make docker-pdf-parser-logs$(RESET) View pdf-parser logs"
 	@echo ""
 	@echo "$(BOLD)$(BLUE)📦 SDKs$(RESET)"
 	@echo "  $(GREEN)make sdk-rust-build$(RESET)    Build Rust SDK (sdks/rust)"
@@ -366,8 +369,10 @@ dev: check-deps check-ports ## Start full development stack (DB + Backend + Fron
 	@# OODA-09: Dynamically select provider based on OPENAI_API_KEY
 	@if [ -n "$(OPENAI_API_KEY)" ]; then \
 		echo "$(BOLD)$(YELLOW)📝 Using OpenAI provider (OPENAI_API_KEY detected)$(RESET)"; \
+	elif [ "$(EDGEQUAKE_DEFAULT_LLM_PROVIDER)" = "lmstudio" ]; then \
+		echo "$(BOLD)$(YELLOW)📝 Using LM Studio provider ($(LMSTUDIO_MODEL))$(RESET)"; \
 	else \
-		echo "$(BOLD)$(YELLOW)📝 Using Ollama as default LLM provider$(RESET)"; \
+		echo "$(BOLD)$(YELLOW)📝 Using $(EDGEQUAKE_DEFAULT_LLM_PROVIDER) as default LLM provider$(RESET)"; \
 	fi
 	@echo ""
 	@echo "$(YELLOW)→ Stopping any existing services...$(RESET)"
@@ -384,7 +389,7 @@ dev: check-deps check-ports ## Start full development stack (DB + Backend + Fron
 	@if [ -n "$(OPENAI_API_KEY)" ]; then \
 		echo "  $(BLUE)Provider$(RESET): OpenAI"; \
 	else \
-		echo "  $(BLUE)Provider$(RESET): Ollama (http://localhost:11434)"; \
+		echo "  $(BLUE)Provider$(RESET): $(EDGEQUAKE_DEFAULT_LLM_PROVIDER)"; \
 	fi
 	@echo ""
 	@echo "$(GREEN)✓ Services starting...$(RESET)"
@@ -395,14 +400,17 @@ dev: check-deps check-ports ## Start full development stack (DB + Backend + Fron
 		(cd $(BACKEND_DIR) && \
 			DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:5432/edgequake" \
 			OPENAI_API_KEY="$(OPENAI_API_KEY)" \
+			EDGEQUAKE_LLM_PROVIDER="openai" \
+			EDGEQUAKE_VISION_PROVIDER="$(EDGEQUAKE_VISION_PROVIDER)" \
+			EDGEQUAKE_VISION_MODEL="$(EDGEQUAKE_VISION_MODEL)" \
 			cargo run 2>&1 | sed 's/^/[backend] /') & \
 		BACKEND_PID=$$!; \
 	else \
 		(cd $(BACKEND_DIR) && \
 			DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:5432/edgequake" \
-			OLLAMA_HOST="http://localhost:11434" \
-			OLLAMA_MODEL="gemma3:latest" \
-			OLLAMA_EMBEDDING_MODEL="nomic-embed-text" \
+			EDGEQUAKE_LLM_PROVIDER="$(EDGEQUAKE_DEFAULT_LLM_PROVIDER)" \
+			EDGEQUAKE_VISION_PROVIDER="$(EDGEQUAKE_VISION_PROVIDER)" \
+			EDGEQUAKE_VISION_MODEL="$(EDGEQUAKE_VISION_MODEL)" \
 			cargo run 2>&1 | sed 's/^/[backend] /') & \
 		BACKEND_PID=$$!; \
 	fi; \
@@ -437,7 +445,7 @@ dev-bg: check-deps check-ports ## Start full development stack in BACKGROUND (ag
 	@if [ -n "$(OPENAI_API_KEY)" ]; then \
 		echo "$(BOLD)$(YELLOW)📝 Using OpenAI provider$(RESET)"; \
 	else \
-		echo "$(BOLD)$(YELLOW)📝 Using Ollama as default LLM provider$(RESET)"; \
+		echo "$(BOLD)$(YELLOW)📝 Using $(EDGEQUAKE_DEFAULT_LLM_PROVIDER) as default LLM provider$(RESET)"; \
 	fi
 	@echo ""
 	@$(MAKE) stop --no-print-directory 2>/dev/null || true
@@ -458,14 +466,15 @@ dev-bg: check-deps check-ports ## Start full development stack in BACKGROUND (ag
 			DATABASE_URL="$(DATABASE_URL)" \
 			OPENAI_API_KEY="$(OPENAI_API_KEY)" \
 			EDGEQUAKE_LLM_PROVIDER="openai" \
+			EDGEQUAKE_VISION_PROVIDER="$(EDGEQUAKE_VISION_PROVIDER)" \
+			EDGEQUAKE_VISION_MODEL="$(EDGEQUAKE_VISION_MODEL)" \
 			nohup cargo run > /tmp/edgequake-backend.log 2>&1 & \
 	else \
 		cd $(BACKEND_DIR) && \
 			DATABASE_URL="$(DATABASE_URL)" \
-			EDGEQUAKE_LLM_PROVIDER="ollama" \
-			OLLAMA_HOST="http://localhost:11434" \
-			OLLAMA_MODEL="gemma3:latest" \
-			OLLAMA_EMBEDDING_MODEL="nomic-embed-text" \
+			EDGEQUAKE_LLM_PROVIDER="$(EDGEQUAKE_DEFAULT_LLM_PROVIDER)" \
+			EDGEQUAKE_VISION_PROVIDER="$(EDGEQUAKE_VISION_PROVIDER)" \
+			EDGEQUAKE_VISION_MODEL="$(EDGEQUAKE_VISION_MODEL)" \
 			nohup cargo run > /tmp/edgequake-backend.log 2>&1 & \
 	fi
 	@echo "$(GREEN)✓ Backend starting (log: /tmp/edgequake-backend.log)$(RESET)"
@@ -487,8 +496,8 @@ dev-bg: check-deps check-ports ## Start full development stack in BACKGROUND (ag
 		echo "  $(BLUE)LLM Provider$(RESET): openai (gpt-5-nano)"; \
 		echo "  $(BLUE)Embedding$(RESET): openai (text-embedding-3-small, 1536d)"; \
 	else \
-		echo "  $(BLUE)LLM Provider$(RESET): ollama (gemma3:latest)"; \
-		echo "  $(BLUE)Embedding$(RESET): ollama (nomic-embed-text, 768d)"; \
+		echo "  $(BLUE)LLM Provider$(RESET): $(EDGEQUAKE_DEFAULT_LLM_PROVIDER)"; \
+		echo "  $(BLUE)LLM Model$(RESET):    $(EDGEQUAKE_DEFAULT_LLM_MODEL)"; \
 	fi
 	@echo ""
 	@echo "  Use $(BOLD)make status$(RESET) to check service health"
@@ -754,7 +763,13 @@ docker-up: ## Start full stack via Docker Compose
 	@echo ""
 	@echo "$(YELLOW)→ Building and starting services...$(RESET)"
 	@echo ""
-	@cd $(DOCKER_DIR) && docker compose up -d
+	@if command -v nvidia-smi >/dev/null 2>&1; then \
+		echo "$(YELLOW)→ GPU detected. Starting with GPU acceleration...$(RESET)"; \
+		cd $(DOCKER_DIR) && docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d; \
+	else \
+		echo "$(YELLOW)→ No GPU detected. Starting with CPU mode...$(RESET)"; \
+		cd $(DOCKER_DIR) && docker compose up -d; \
+	fi
 	@echo ""
 	@echo "$(YELLOW)→ Waiting for services to be ready...$(RESET)"
 	@sleep 5
@@ -798,6 +813,25 @@ docker-logs: ## View Docker logs
 
 docker-ps: ## Show Docker container status
 	@cd $(DOCKER_DIR) && docker compose ps
+
+docker-pdf-parser-build: ## Build just the pdf-parser microservice image
+	@echo "$(BLUE)Building pdf-parser image...$(RESET)"
+	@cd $(DOCKER_DIR) && docker compose build pdf-parser
+	@echo "$(GREEN)✓ pdf-parser image built$(RESET)"
+
+docker-pdf-parser-up: ## Start just the pdf-parser microservice
+	@echo "$(BLUE)Starting pdf-parser container...$(RESET)"
+	@if command -v nvidia-smi >/dev/null 2>&1; then \
+		echo "$(YELLOW)→ GPU detected. Starting with GPU acceleration...$(RESET)"; \
+		cd $(DOCKER_DIR) && docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d pdf-parser; \
+	else \
+		echo "$(YELLOW)→ No GPU detected. Starting with CPU mode...$(RESET)"; \
+		cd $(DOCKER_DIR) && docker compose up -d pdf-parser; \
+	fi
+	@echo "$(GREEN)✓ pdf-parser container started$(RESET)"
+
+docker-pdf-parser-logs: ## View pdf-parser logs
+	@cd $(DOCKER_DIR) && docker compose logs -f pdf-parser
 
 # ============================================================================
 # Quality Assurance

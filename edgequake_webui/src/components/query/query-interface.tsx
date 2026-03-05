@@ -23,8 +23,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import {
-    useConversation,
-    useConversations,
+  useConversation,
+  useConversations,
 } from '@/hooks/use-conversations';
 import { chatCompletion, chatCompletionStream } from '@/lib/api/chat';
 import { ApiRequestError } from '@/lib/api/client';
@@ -38,14 +38,14 @@ import { useTenantStore } from '@/stores/use-tenant-store';
 import type { QueryContext, ServerMessage } from '@/types';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-    BookOpen,
-    GitBranch,
-    Lightbulb,
-    Plus,
-    Search,
-    Send,
-    Sparkles,
-    StopCircle
+  BookOpen,
+  GitBranch,
+  Lightbulb,
+  Plus,
+  Search,
+  Send,
+  Sparkles,
+  StopCircle
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -130,7 +130,7 @@ const EmptyState = memo(function EmptyState({ onSuggestionClick, graphStats }: E
           <Sparkles className="h-10 w-10 text-primary-foreground" />
         </div>
       </div>
-      
+
       {/* Title and description */}
       <h2 className="text-2xl font-bold mb-2 text-center">
         {t('query.emptyTitle', 'Ask about your knowledge graph')}
@@ -215,49 +215,49 @@ export function QueryInterface() {
   const queryClient = useQueryClient();
   const { querySettings, setQuerySettings } = useSettingsStore();
   const { selectedTenantId, selectedWorkspaceId } = useTenantStore();
-  
+
   // Use the new server-synced state
   const store = useQueryUIStore();
   const activeConversationId = useActiveConversationId();
-  
+
   // Server state for active conversation
   // Capture error/isError to handle stale conversation IDs gracefully
-  const { 
-    data: activeConversation, 
+  const {
+    data: activeConversation,
     isLoading: isLoadingConversation,
     error: conversationError,
     isError: isConversationError,
   } = useConversation(activeConversationId);
-  
+
   // List conversations to auto-load most recent one if none is active
   const { data: conversationsData } = useConversations({
     sort: 'updated_at', // Get most recent first
   });
-  
+
   // Handle stale conversation error (404) - auto-recover by clearing the stale ID
   // This happens when localStorage has a conversation ID that no longer exists on the server
   // (e.g., after backend restart with in-memory storage, or conversation was deleted)
   useEffect(() => {
     if (!isConversationError || !activeConversationId) return;
-    
+
     // Check if this is a 404 "not found" error
-    const is404Error = 
+    const is404Error =
       (conversationError instanceof ApiRequestError && conversationError.status === 404) ||
-      (conversationError instanceof Error && 
-        conversationError.message.toLowerCase().includes('not found') && 
+      (conversationError instanceof Error &&
+        conversationError.message.toLowerCase().includes('not found') &&
         conversationError.message.toLowerCase().includes('conversation'));
-    
+
     if (is404Error) {
       // Clear the stale conversation ID
       store.setActiveConversation(null);
-      
+
       // Show a friendly notification (not an error toast)
       toast(t('query.conversationExpired', 'Previous conversation not available'), {
         description: t('query.startingFreshSession', 'Starting a fresh session.'),
       });
     }
   }, [isConversationError, conversationError, activeConversationId, store, t]);
-  
+
   // Auto-load most recent conversation on mount if none is active
   // Only do this once on initial mount, not when user clicks "New"
   useEffect(() => {
@@ -265,10 +265,10 @@ export function QueryInterface() {
     if (hasInitializedRef.current) {
       return;
     }
-    
+
     // Mark as initialized to prevent future auto-loads
     hasInitializedRef.current = true;
-    
+
     // Only auto-load if we have conversations and no active conversation
     const firstPage = conversationsData?.pages?.[0];
     if (!activeConversationId && firstPage?.items && firstPage.items.length > 0) {
@@ -276,7 +276,7 @@ export function QueryInterface() {
       store.setActiveConversation(mostRecentConversation.id);
     }
   }, [activeConversationId, conversationsData, store]);
-  
+
   // Convert ServerMessage to local Message format
   const convertServerMessage = useCallback((msg: ServerMessage): Message => {
     // Convert ServerMessageContext to QueryContext format
@@ -284,13 +284,13 @@ export function QueryInterface() {
     if (msg.context) {
       // Filter sources by type
       const chunkSources = msg.context.sources?.filter(s => s.source_type === 'chunk' || !s.source_type) ?? [];
-      
+
       // Helper to extract document UUID from chunk ID (format: "uuid-chunk-N" -> "uuid")
       const extractDocId = (chunkId: string): string => {
         const suffixIndex = chunkId.lastIndexOf('-chunk-');
         return suffixIndex > 0 ? chunkId.substring(0, suffixIndex) : chunkId;
       };
-      
+
       context = {
         chunks: chunkSources.map(s => ({
           content: s.content,
@@ -341,7 +341,7 @@ export function QueryInterface() {
         }) ?? [],
       };
     }
-    
+
     return {
       id: msg.id,
       role: msg.role as 'user' | 'assistant',
@@ -389,7 +389,7 @@ export function QueryInterface() {
     }
 
     return result;
-  }, [activeConversation?.messages, pendingMessage, optimisticUserMessage, convertServerMessage, activeConversationId]);
+  }, [activeConversation?.messages, pendingMessage, optimisticUserMessage, convertServerMessage]);
 
   // Handle tenant/workspace change - start fresh
   useEffect(() => {
@@ -408,7 +408,7 @@ export function QueryInterface() {
   // Smart scroll to bottom when messages change - only if user hasn't scrolled up
   useEffect(() => {
     if (!shouldAutoScroll) return;
-    
+
     if (scrollAnchorRef.current) {
       scrollAnchorRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
@@ -475,7 +475,6 @@ export function QueryInterface() {
       let context: QueryContext | undefined;
       let thinkingTimeMs: number | undefined;
       let newConversationId = conversationId;
-      let assistantMessageId: string | undefined;
       // SPEC-032: Track LLM provider/model for lineage display
       let llmProvider: string | undefined;
       let llmModel: string | undefined;
@@ -542,12 +541,19 @@ export function QueryInterface() {
 
           case 'done':
             // Server has saved the assistant message
-            assistantMessageId = chunk.assistant_message_id;
             tokensUsed = chunk.tokens_used || 0;
             durationMs = chunk.duration_ms || 0;
             // SPEC-032: Capture LLM provider/model for lineage tracking
             llmProvider = chunk.llm_provider;
             llmModel = chunk.llm_model;
+
+            setPendingMessage(prev => prev ? {
+              ...prev,
+              tokensUsed,
+              durationMs,
+              llmProvider,
+              llmModel,
+            } : null);
             break;
 
           case 'title_update':
@@ -574,13 +580,13 @@ export function QueryInterface() {
       // 2. Fetch the server-persisted conversation (user + assistant messages)
       //    while the pending message is still displayed.
       if (newConversationId) {
-        await queryClient.invalidateQueries({ 
-          queryKey: conversationKeys.detail(newConversationId) 
+        await queryClient.invalidateQueries({
+          queryKey: conversationKeys.detail(newConversationId)
         });
-        await queryClient.invalidateQueries({ 
-          queryKey: conversationKeys.lists() 
+        await queryClient.invalidateQueries({
+          queryKey: conversationKeys.lists()
         });
-        
+
         // Give React Query a moment to refetch
         await new Promise(resolve => setTimeout(resolve, 150));
       }
@@ -602,21 +608,21 @@ export function QueryInterface() {
 
       // Handle stale conversation ID (404 - Conversation not found)
       // This occurs when backend restarts (in-memory storage) or conversation was deleted
-      const isConversationNotFound = 
+      const isConversationNotFound =
         (error instanceof ApiRequestError && error.status === 404) ||
         (error instanceof Error && error.message.includes('not found') && error.message.toLowerCase().includes('conversation'));
-      
+
       if (isConversationNotFound && conversationId) {
         // Clear the stale conversation and retry with a new one
         store.setActiveConversation(null);
         setPendingMessage(null);
         setOptimisticUserMessage(null);
         setStreamingState('idle');
-        
+
         toast.warning(t('query.conversationExpired', 'Conversation expired'), {
           description: t('query.startingNewConversation', 'Starting a new conversation. Please submit your query again.'),
         });
-        
+
         // Set the input back so user can easily retry
         // Note: We don't auto-retry to avoid potential loops
         return;
@@ -645,11 +651,11 @@ export function QueryInterface() {
       abortControllerRef.current = null;
       thinkingStartRef.current = null;
     }
-  }, [querySettings, queryClient, store, t]);
+  }, [querySettings, queryClient, store, t, i18n.language]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    
+
     // Guard against empty input or double-submission while loading
     const isStreamingOrLoading = streamingState === 'thinking' || streamingState === 'generating';
     if (!input.trim() || isStreamingOrLoading) return;
@@ -713,10 +719,10 @@ export function QueryInterface() {
         setStreamingState('complete');
       } catch (error) {
         // Handle stale conversation ID (404 - Conversation not found)
-        const isConversationNotFound = 
+        const isConversationNotFound =
           (error instanceof ApiRequestError && error.status === 404) ||
           (error instanceof Error && error.message.includes('not found') && error.message.toLowerCase().includes('conversation'));
-        
+
         if (isConversationNotFound && conversationId) {
           store.setActiveConversation(null);
           setOptimisticUserMessage(null);
@@ -739,11 +745,11 @@ export function QueryInterface() {
   // Handle regenerate - delete old assistant AND user message, then generate fresh pair
   const handleRegenerate = useCallback(async () => {
     if (!activeConversationId || messages.length < 2) return;
-    
+
     // Find the last user message and the last assistant message
     const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
     const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant');
-    
+
     if (!lastUserMessage) return;
 
     // Save the query text before deleting
@@ -756,19 +762,19 @@ export function QueryInterface() {
       // Delete BOTH the old assistant AND user messages from server
       // This prevents duplicate user messages since handleStreamQuery will create a fresh pair
       const deletePromises = [];
-      
+
       if (lastAssistantMessage && !lastAssistantMessage.isStreaming) {
         deletePromises.push(deleteMessage(lastAssistantMessage.id));
       }
       if (lastUserMessage) {
         deletePromises.push(deleteMessage(lastUserMessage.id));
       }
-      
+
       await Promise.all(deletePromises);
-      
+
       // Invalidate the conversation cache to remove the old messages from UI
-      await queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.detail(activeConversationId) 
+      await queryClient.invalidateQueries({
+        queryKey: conversationKeys.detail(activeConversationId)
       });
     } catch (error) {
       console.error('Failed to delete old messages:', error);
@@ -828,8 +834,8 @@ export function QueryInterface() {
 
             {/* Provider & Model Selector (SPEC-032) */}
             <ProviderModelSelector
-              value={querySettings.provider && querySettings.model 
-                ? `${querySettings.provider}/${querySettings.model}` 
+              value={querySettings.provider && querySettings.model
+                ? `${querySettings.provider}/${querySettings.model}`
                 : ''}
               onChange={(fullModelId) => {
                 // Parse "provider/model" format from selector
@@ -935,7 +941,7 @@ export function QueryInterface() {
                     aria-label={t('query.stop', 'Stop generating')}
                   >
                     <StopCircle className="h-4 w-4 mr-1" aria-hidden="true" />
-                    Stop
+                    {t('query.stop', 'Stop')}
                   </Button>
                 ) : (
                   <Button

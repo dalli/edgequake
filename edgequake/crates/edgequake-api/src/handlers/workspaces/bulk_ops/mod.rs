@@ -157,8 +157,10 @@ pub(super) fn build_pdf_task(
         .vision_llm_provider
         .as_deref()
         .filter(|p| !p.is_empty())
-        .unwrap_or("ollama")
-        .to_string();
+        .map(|p| p.to_string())
+        .unwrap_or_else(|| {
+            std::env::var("EDGEQUAKE_VISION_PROVIDER").unwrap_or_else(|_| "openai".to_string())
+        });
     let vision_model = workspace.vision_llm_model.clone().filter(|m| !m.is_empty());
 
     edgequake_tasks::PdfProcessingData {

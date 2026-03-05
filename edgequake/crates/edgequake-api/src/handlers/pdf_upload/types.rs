@@ -25,19 +25,23 @@ pub struct PdfUploadOptions {
 }
 
 impl PdfUploadOptions {
-    /// Get the resolved vision provider (with fallback to server default).
-    pub fn resolved_vision_provider(&self) -> &str {
-        self.vision_provider.as_deref().unwrap_or("openai")
+    /// Get the resolved vision provider (with fallback to environment or hard default).
+    pub fn resolved_vision_provider(&self) -> String {
+        self.vision_provider.clone().unwrap_or_else(|| {
+            std::env::var("EDGEQUAKE_VISION_PROVIDER").unwrap_or_else(|_| "openai".to_string())
+        })
     }
 
-    /// Get the vision model to use (with fallback from provider).
+    /// Get the vision model to use (with fallback from environment or provider defaults).
     pub fn vision_model(&self) -> String {
-        self.vision_model
-            .clone()
-            .unwrap_or_else(|| match self.resolved_vision_provider() {
-                "ollama" => "gemma3:latest".to_string(),
-                _ => "gpt-4.1-nano".to_string(),
+        self.vision_model.clone().unwrap_or_else(|| {
+            std::env::var("EDGEQUAKE_VISION_MODEL").unwrap_or_else(|_| {
+                match self.resolved_vision_provider().as_str() {
+                    "ollama" => "gemma3:latest".to_string(),
+                    _ => "gpt-4.1-nano".to_string(),
+                }
             })
+        })
     }
 }
 

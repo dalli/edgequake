@@ -205,15 +205,26 @@ pub async fn reprocess_failed(
                                         .vision_llm_provider
                                         .as_deref()
                                         .filter(|p| !p.is_empty())
-                                        .unwrap_or("ollama")
-                                        .to_string();
+                                        .map(|p| p.to_string())
+                                        .unwrap_or_else(|| {
+                                            std::env::var("EDGEQUAKE_VISION_PROVIDER")
+                                                .unwrap_or_else(|_| "openai".to_string())
+                                        });
                                     let vm = ws.vision_llm_model.filter(|m| !m.is_empty());
                                     (vp, vm)
                                 } else {
-                                    ("ollama".to_string(), None)
+                                    (
+                                        std::env::var("EDGEQUAKE_VISION_PROVIDER")
+                                            .unwrap_or_else(|_| "openai".to_string()),
+                                        None,
+                                    )
                                 }
                             } else {
-                                ("ollama".to_string(), None)
+                                (
+                                    std::env::var("EDGEQUAKE_VISION_PROVIDER")
+                                        .unwrap_or_else(|_| "openai".to_string()),
+                                    None,
+                                )
                             };
 
                         use edgequake_tasks::{PdfProcessingData, Task, TaskType};

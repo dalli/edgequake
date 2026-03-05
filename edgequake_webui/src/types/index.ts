@@ -83,13 +83,13 @@ export interface Document {
   content?: string;
   source_type?: "file" | "text" | "url" | "pdf" | "markdown";
   status?:
-    | "pending"
-    | "processing"
-    | "completed"
-    | "partial_failure"
-    | "failed"
-    | "indexed"
-    | "cancelled";
+  | "pending"
+  | "processing"
+  | "completed"
+  | "partial_failure"
+  | "failed"
+  | "indexed"
+  | "cancelled";
   error_message?: string;
   file_name?: string;
   file_size?: number;
@@ -928,13 +928,13 @@ export interface GraphSettings {
   nodeSize: "small" | "medium" | "large";
   edgeThickness: "thin" | "medium" | "thick";
   layout:
-    | "force"
-    | "circular"
-    | "random"
-    | "circlepack"
-    | "noverlaps"
-    | "force-directed"
-    | "hierarchical";
+  | "force"
+  | "circular"
+  | "random"
+  | "circlepack"
+  | "noverlaps"
+  | "force-directed"
+  | "hierarchical";
   colorBy: "type" | "community" | "degree";
   enableNodeDrag?: boolean;
   highlightNeighbors?: boolean;
@@ -975,7 +975,7 @@ export interface IngestionSettings {
 
 export interface AppSettings {
   theme: "light" | "dark" | "system";
-  language: "en" | "zh" | "ja" | "ko";
+  language: "en" | "zh" | "fr" | "ko";
   graphSettings: GraphSettings;
   querySettings: QuerySettings;
   ingestionSettings: IngestionSettings;

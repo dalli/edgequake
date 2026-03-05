@@ -53,7 +53,7 @@ pub(super) async fn create_pdf_processing_task(
         tenant_id,
         workspace_id,
         enable_vision: options.enable_vision,
-        vision_provider: options.resolved_vision_provider().to_string(),
+        vision_provider: options.resolved_vision_provider(),
         vision_model: options.vision_model.clone(),
         existing_document_id: None, // Fresh upload — create new document
     };

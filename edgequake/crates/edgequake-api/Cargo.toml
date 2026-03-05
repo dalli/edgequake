@@ -28,6 +28,8 @@ edgequake-audit = { path = "../edgequake-audit" }
 # v0.7.0: page-level checkpointing for resumable conversions (Issue #20, PR #21)
 edgequake-pdf2md = "=0.7.0"
 
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+
 axum.workspace = true
 axum-extra = { version = "0.10", features = ["multipart"] }
 tokio = { workspace = true, features = ["full"] }

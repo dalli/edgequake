@@ -211,198 +211,84 @@ impl DocumentTaskProcessor {
         let (markdown, extraction_method, used_vision_model) = if data.enable_vision {
             #[cfg(feature = "vision")]
             {
-                use edgequake_pdf2md::{convert_from_bytes, ConversionConfig};
-
                 let model = data
                     .vision_model
                     .clone()
-                    .unwrap_or_else(|| "gpt-4.1-nano".to_string());
+                    .unwrap_or_else(|| "gpt-4o-mini".to_string());
                 let pdf_bytes = pdf.pdf_data.clone();
+                let pdf_id_str = data.pdf_id.to_string();
 
-                // WHY: Vision extraction uses a provider selected per-workspace
-                // (e.g. OpenAI gpt-4o-mini), which may differ from the system
-                // entity-extraction LLM (e.g. Ollama). Cloning self.llm_provider
-                // would silently send vision requests to the wrong provider and
-                // produce hallucinated content. We create a dedicated provider
-                // using data.vision_provider so the correct API key and endpoint
-                // are used (SPEC-040 fix).
-                let provider = {
-                    use crate::safety_limits::create_safe_llm_provider;
-                    create_safe_llm_provider(&data.vision_provider, &model).map_err(|e| {
+                info!(
+                    pdf_id = %data.pdf_id,
+                    "Starting vision extraction via pdf-parser microservice"
+                );
+
+                // Send request to new pdf-parser microservice
+                let pdf_parser_url = std::env::var("PDF_PARSER_URL")
+                    .unwrap_or_else(|_| "http://pdf-parser:8000/api/v1/parse".to_string());
+
+                let file_part = reqwest::multipart::Part::bytes(pdf_bytes)
+                    .file_name(pdf.filename.clone())
+                    .mime_str("application/pdf")
+                    .unwrap_or_else(|_| reqwest::multipart::Part::bytes(vec![]));
+
+                let form = reqwest::multipart::Form::new().part("file", file_part);
+
+                let client = reqwest::Client::new();
+                
+                let response = client
+                    .post(&pdf_parser_url)
+                    .multipart(form)
+                    .send()
+                    .await
+                    .map_err(|e| {
                         edgequake_tasks::TaskError::Processing(format!(
-                            "Failed to create vision provider '{}': {e}",
-                            data.vision_provider
+                            "Failed to contact pdf-parser microservice: {e}"
                         ))
-                    })?
-                };
-                let model_owned = model.clone();
+                    })?;
 
-                // LARGE-DOC: Adaptive concurrency based on page count.
-                // WHY: For documents with 1000+ pages, we need to limit concurrency
-                // to avoid overwhelming the LLM provider and running out of memory.
-                // Small docs (< 50 pages): default 10 concurrent requests
-                // Medium docs (50-200 pages): 8 concurrent requests
-                // Large docs (200-500 pages): 5 concurrent requests
-                // Very large docs (500+ pages): 3 concurrent requests
-                let page_count = pdf.page_count.unwrap_or(0) as usize;
-                let concurrency = std::env::var("EDGEQUAKE_PDF_CONCURRENCY")
-                    .ok()
-                    .and_then(|v| v.parse::<usize>().ok())
-                    .unwrap_or(match page_count {
-                        0..=49 => 10,
-                        50..=199 => 8,
-                        200..=499 => 5,
-                        _ => 3,
-                    });
+                if !response.status().is_success() {
+                    let err_text = response.text().await.unwrap_or_default();
+                    error!(
+                        pdf_id = %data.pdf_id,
+                        error = %err_text,
+                        "PDF parser microservice returned an error"
+                    );
+                    return Err(edgequake_tasks::TaskError::Processing(format!(
+                        "PDF parser microservice error: {}", err_text
+                    )));
+                }
 
-                // LARGE-DOC: Adaptive DPI based on page count.
-                // WHY: For very large documents, lower DPI reduces memory usage
-                // per page image while keeping acceptable quality.
-                // Small docs: 150 DPI (default quality)
-                // Large docs (500+ pages): 120 DPI (saves ~36% memory per image)
-                // Very large docs (1000+ pages): 100 DPI (saves ~55% memory per image)
-                let dpi = std::env::var("EDGEQUAKE_PDF_DPI")
-                    .ok()
-                    .and_then(|v| v.parse::<u32>().ok())
-                    .unwrap_or(match page_count {
-                        0..=499 => 150,
-                        500..=999 => 120,
-                        _ => 100,
-                    });
+                #[derive(serde::Deserialize)]
+                struct ParseResponse {
+                    markdown: String,
+                    pages: usize,
+                    status: String,
+                    error: Option<String>,
+                }
 
-                info!(
-                    pdf_id = %data.pdf_id,
-                    vision_provider = %data.vision_provider,
-                    vision_model = %model,
-                    page_count = page_count,
-                    concurrency = concurrency,
-                    dpi = dpi,
-                    "Starting vision extraction via edgequake-pdf2md v0.6.1 (progress callback connected, adaptive concurrency)"
-                );
+                let parsed: ParseResponse = response
+                    .json()
+                    .await
+                    .map_err(|e| {
+                        edgequake_tasks::TaskError::Processing(format!(
+                            "Failed to parse microservice response: {e}"
+                        ))
+                    })?;
 
-                // WHY Handle::current before spawn_blocking: must capture the runtime
-                // handle on the async thread before entering the blocking thread.
-                let handle = tokio::runtime::Handle::current();
-
-                // FIX-TIMEOUT: Adaptive timeout based on page count.
-                // WHY: A fixed 10-minute timeout is insufficient for 1000+ page documents.
-                // Scale timeout linearly: base 60s + 5s per page, minimum 600s.
-                // A 1000-page doc gets ~5060 seconds (~84 minutes).
-                let base_timeout_secs: u64 = std::env::var("EDGEQUAKE_VISION_TIMEOUT_SECS")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0);
-                let vision_timeout_secs = if base_timeout_secs > 0 {
-                    base_timeout_secs // Explicit override
-                } else {
-                    let adaptive = 60 + (page_count as u64 * 5);
-                    adaptive.max(600) // Minimum 10 minutes
-                };
-                let vision_timeout = std::time::Duration::from_secs(vision_timeout_secs);
+                if let Some(err) = parsed.error {
+                    return Err(edgequake_tasks::TaskError::Processing(format!(
+                        "PDF parser microservice internal error: {}", err
+                    )));
+                }
 
                 info!(
                     pdf_id = %data.pdf_id,
-                    timeout_secs = vision_timeout_secs,
-                    "Vision extraction timeout set (adaptive for {} pages)",
-                    page_count
+                    pages = parsed.pages,
+                    markdown_len = parsed.markdown.len(),
+                    "Vision extraction completed via microservice"
                 );
-
-                let spawn_result = tokio::time::timeout(
-                    vision_timeout,
-                    tokio::task::spawn_blocking(move || {
-                        // CHECKPOINT: Create FileCheckpointStore for resumable PDF→MD conversion.
-                        // WHY: If the server crashes mid-conversion of a 1000-page PDF,
-                        // already-converted pages are saved to disk and skipped on retry,
-                        // saving hours of LLM calls and API costs.
-                        // The checkpoint ID is a SHA-256 of (PDF content prefix + settings),
-                        // so the same PDF with the same settings always resumes correctly.
-                        let checkpoint_dir = std::env::var("EDGEQUAKE_CHECKPOINT_DIR")
-                            .unwrap_or_else(|_| {
-                                let mut dir = std::env::temp_dir();
-                                dir.push("edgequake-checkpoints");
-                                dir.to_string_lossy().to_string()
-                            });
-                        let checkpoint_store: Option<
-                            std::sync::Arc<dyn edgequake_pdf2md::CheckpointStore>,
-                        > = {
-                            let store = edgequake_pdf2md::FileCheckpointStore::new(&checkpoint_dir);
-                            tracing::info!(
-                                checkpoint_dir = %checkpoint_dir,
-                                "PDF checkpoint store initialized for resumable conversion"
-                            );
-                            Some(std::sync::Arc::new(store))
-                        };
-
-                        // CHECKPOINT: Force fresh conversion on rebuild/reprocess.
-                        // WHY: When a user explicitly triggers rebuild, they want fresh
-                        // extraction with potentially different LLM settings. Reusing
-                        // old checkpoints would silently serve stale content.
-                        let force_no_resume = is_reprocess;
-
-                        let mut builder = ConversionConfig::builder()
-                            .provider(provider)
-                            .model(model_owned)
-                            .concurrency(concurrency)
-                            .dpi(dpi)
-                            .progress_callback(progress_callback);
-
-                        if let Some(store) = checkpoint_store {
-                            builder = builder.checkpoint_store(store);
-                        }
-                        if force_no_resume {
-                            builder = builder.no_resume(true);
-                        }
-
-                        let config = builder.build().map_err(|e| format!("Vision config: {e}"))?;
-                        // Handle::block_on has no Send bound on the future
-                        handle
-                            .block_on(convert_from_bytes(&pdf_bytes, &config))
-                            .map_err(|e| format!("Vision extraction: {e}"))
-                    }),
-                )
-                .await;
-
-                let output = match spawn_result {
-                    Ok(join_result) => join_result
-                        .map_err(|e| {
-                            edgequake_tasks::TaskError::Processing(format!("Spawn error: {e}"))
-                        })?
-                        .map_err(edgequake_tasks::TaskError::Processing)?,
-                    Err(_elapsed) => {
-                        error!(
-                            pdf_id = %data.pdf_id,
-                            timeout_secs = vision_timeout.as_secs(),
-                            "Vision extraction timed out - LLM provider may be unresponsive"
-                        );
-                        // Update document status to failed with clear timeout message
-                        let _ = self
-                            .update_document_status(
-                                &early_doc_id,
-                                "failed",
-                                Some(&format!(
-                                    "Vision extraction timed out after {}s. Check that the LLM provider ({}) is reachable.",
-                                    vision_timeout.as_secs(),
-                                    data.vision_provider
-                                )),
-                            )
-                            .await;
-                        return Err(edgequake_tasks::TaskError::Timeout(format!(
-                            "Vision extraction timed out after {}s for PDF {}. Provider '{}' may be unresponsive.",
-                            vision_timeout.as_secs(),
-                            data.pdf_id,
-                            data.vision_provider
-                        )));
-                    }
-                };
-
-                info!(
-                    pdf_id = %data.pdf_id,
-                    pages = output.stats.total_pages,
-                    processed = output.stats.processed_pages,
-                    markdown_len = output.markdown.len(),
-                    "Vision extraction completed"
-                );
-                (output.markdown, ExtractionMethod::Vision, Some(model))
+                (parsed.markdown, ExtractionMethod::Vision, Some(model))
             }
             #[cfg(not(feature = "vision"))]
             {
