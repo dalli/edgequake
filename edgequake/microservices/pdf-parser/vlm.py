@@ -271,19 +271,25 @@ def get_vlm_engine():
 
         try:
             from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
-            logger.info(f"Loading {model_name} on CPU...")
-            _vlm_engine = {
-                "model": Qwen2VLForConditionalGeneration.from_pretrained(
-                    model_name, torch_dtype=torch.float32, device_map="cpu"
-                ),
-                "processor": AutoProcessor.from_pretrained(model_name)
-            }
+            logger.info(f"Loading {model_name} on CPU (no GPU detected)...")
+            # WHY: Use dtype= instead of deprecated torch_dtype=
+            # WHY: Avoid device_map="cpu" which requires accelerate; use .to("cpu") instead
+            model = Qwen2VLForConditionalGeneration.from_pretrained(
+                model_name,
+                dtype=torch.float32,
+            ).to("cpu")
+            processor = AutoProcessor.from_pretrained(model_name)
+            _vlm_engine = {"model": model, "processor": processor}
             _vlm_type = "transformers"
             logger.info("Transformers engine initialized on CPU.")
         except Exception as e:
-            logger.error(f"Transformers CPU init failed: {e}")
+            logger.error(f"Transformers CPU init failed: {e}", exc_info=True)
             _vlm_engine = "mock"
             _vlm_type = "mock"
+            logger.warning(
+                "VLM running in MOCK mode — parsed output will be placeholders. "
+                "Install accelerate or provide a GPU to enable real VLM inference."
+            )
 
     return _vlm_engine, _vlm_type
 
