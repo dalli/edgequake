@@ -752,9 +752,17 @@ db-clean-force: ## Force clean database by destroying and recreating container
 # Docker (Full Stack)
 # ============================================================================
 
-docker-build: ## Build all Docker images
+docker-build: ## Build all Docker images (Use ARCH=arm or ARCH=amd to specify platform)
 	@echo "$(BLUE)Building Docker images...$(RESET)"
-	@cd $(DOCKER_DIR) && docker compose build
+	@if [ "$(ARCH)" = "arm" ]; then \
+		echo "$(YELLOW)→ Building for linux/arm64...$(RESET)"; \
+		cd $(DOCKER_DIR) && DOCKER_DEFAULT_PLATFORM=linux/arm64 docker compose build; \
+	elif [ "$(ARCH)" = "amd" ]; then \
+		echo "$(YELLOW)→ Building for linux/amd64...$(RESET)"; \
+		cd $(DOCKER_DIR) && DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose build; \
+	else \
+		cd $(DOCKER_DIR) && docker compose build; \
+	fi
 	@echo "$(GREEN)✓ Docker images built$(RESET)"
 
 docker-up: ## Start full stack via Docker Compose
