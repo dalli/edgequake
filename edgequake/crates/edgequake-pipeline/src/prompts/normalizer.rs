@@ -22,15 +22,46 @@
 //! By normalizing to `JOHN_DOE`, all references merge into a single node,
 //! preserving the complete relationship graph.
 
+/// Check if a string contains primarily CJK (Chinese/Japanese/Korean) characters.
+///
+/// Returns true if more than half the non-whitespace characters are CJK.
+fn is_cjk_text(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+    if chars.is_empty() {
+        return false;
+    }
+    let cjk_count = chars.iter().filter(|&&c| is_cjk_char(c)).count();
+    cjk_count * 2 > chars.len()
+}
+
+/// Check if a character is a CJK (Chinese/Japanese/Korean) character.
+fn is_cjk_char(c: char) -> bool {
+    matches!(c,
+        '\u{1100}'..='\u{11FF}' |  // Hangul Jamo
+        '\u{3040}'..='\u{309F}' |  // Hiragana
+        '\u{30A0}'..='\u{30FF}' |  // Katakana
+        '\u{3130}'..='\u{318F}' |  // Hangul Compatibility Jamo
+        '\u{4E00}'..='\u{9FFF}' |  // CJK Unified Ideographs
+        '\u{AC00}'..='\u{D7AF}' |  // Hangul Syllables (Korean)
+        '\u{D7B0}'..='\u{D7FF}' |  // Hangul Jamo Extended-B
+        '\u{F900}'..='\u{FAFF}'    // CJK Compatibility Ideographs
+    )
+}
+
 /// Normalize entity name to consistent format.
 ///
-/// Applies the following transformations:
+/// For **Latin text** applies the following transformations:
 /// - Trims whitespace
-/// - Removes common prefixes (The, A, An)
+/// - Removes common English prefixes (The, A, An)
 /// - Removes possessive suffixes ('s)
 /// - Converts to title case
 /// - Replaces spaces with underscores
 /// - Converts to uppercase
+///
+/// For **CJK text** (Korean/Chinese/Japanese):
+/// - Trims whitespace only
+/// - Replaces spaces with underscores (no case change - CJK has no case)
+/// - Does NOT apply English-specific prefix removal
 ///
 /// # Examples
 ///
@@ -40,10 +71,23 @@
 /// assert_eq!(normalize_entity_name("John Doe"), "JOHN_DOE");
 /// assert_eq!(normalize_entity_name("the company"), "COMPANY");
 /// assert_eq!(normalize_entity_name("  Sarah  Chen  "), "SARAH_CHEN");
+/// assert_eq!(normalize_entity_name("삼성전자"), "삼성전자");
+/// assert_eq!(normalize_entity_name("이순신 장군"), "이순신_장군");
 /// ```
 pub fn normalize_entity_name(raw_name: &str) -> String {
     let trimmed = raw_name.trim();
 
+    // For CJK text: no uppercase/case changes, no English prefix removal
+    // Just trim and join words with underscores
+    if is_cjk_text(trimmed) {
+        return trimmed
+            .split_whitespace()
+            .filter(|w| !w.is_empty())
+            .collect::<Vec<_>>()
+            .join("_");
+    }
+
+    // For Latin text: apply full normalization
     // Remove common prefixes that don't add identity
     let without_prefix = trimmed
         .strip_prefix("The ")
@@ -62,7 +106,7 @@ pub fn normalize_entity_name(raw_name: &str) -> String {
             // Remove possessive suffix from each word
             let without_possessive = word
                 .strip_suffix("'s")
-                .or_else(|| word.strip_suffix("'s"))
+                .or_else(|| word.strip_suffix("\u{2019}s"))
                 .unwrap_or(word);
             to_title_case(without_possessive)
         })

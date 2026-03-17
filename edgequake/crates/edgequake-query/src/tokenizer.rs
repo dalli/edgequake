@@ -17,8 +17,50 @@ pub trait Tokenizer: Send + Sync {
     }
 }
 
+/// Check if a character is a CJK (Chinese/Japanese/Korean) character.
+///
+/// CJK characters occupy more token budget than Latin characters because
+/// each character often maps to 1-2 tokens in subword tokenizers (e.g., tiktoken).
+pub fn is_cjk_char(c: char) -> bool {
+    matches!(c,
+        '\u{1100}'..='\u{11FF}' |  // Hangul Jamo
+        '\u{3040}'..='\u{309F}' |  // Hiragana
+        '\u{30A0}'..='\u{30FF}' |  // Katakana
+        '\u{3130}'..='\u{318F}' |  // Hangul Compatibility Jamo
+        '\u{3400}'..='\u{4DBF}' |  // CJK Unified Ideographs Extension A
+        '\u{4E00}'..='\u{9FFF}' |  // CJK Unified Ideographs
+        '\u{A960}'..='\u{A97F}' |  // Hangul Jamo Extended-A
+        '\u{AC00}'..='\u{D7AF}' |  // Hangul Syllables (Korean)
+        '\u{D7B0}'..='\u{D7FF}' |  // Hangul Jamo Extended-B
+        '\u{F900}'..='\u{FAFF}' |  // CJK Compatibility Ideographs
+        '\u{20000}'..='\u{2A6DF}'  // CJK Unified Ideographs Extension B
+    )
+}
+
+/// Estimate token count with language awareness.
+///
+/// - CJK characters: ~2 tokens each (1 char = 1-2 tokens in LLM tokenizers)
+/// - Latin/ASCII text: ~4 characters per token
+pub fn estimate_tokens_for_text(text: &str) -> usize {
+    let mut cjk_tokens = 0usize;
+    let mut latin_bytes = 0usize;
+
+    for c in text.chars() {
+        if is_cjk_char(c) {
+            cjk_tokens += 2; // Each CJK char ≈ 2 tokens
+        } else {
+            latin_bytes += c.len_utf8();
+        }
+    }
+
+    let latin_tokens = (latin_bytes as f32 / 4.0).ceil() as usize;
+    cjk_tokens + latin_tokens
+}
+
 /// Simple tokenizer that estimates tokens (for testing and fallback).
-/// Uses a simple heuristic: ~4 characters per token.
+/// Uses a language-aware heuristic:
+/// - CJK (Korean/Chinese/Japanese): ~2 tokens per character
+/// - Latin/ASCII: ~4 characters per token
 pub struct SimpleTokenizer;
 
 impl SimpleTokenizer {
@@ -36,8 +78,7 @@ impl Default for SimpleTokenizer {
 
 impl Tokenizer for SimpleTokenizer {
     fn encode(&self, text: &str) -> Vec<u32> {
-        // Simple estimation: split by whitespace and punctuation
-        let estimated_tokens = (text.len() as f32 / 4.0).ceil() as usize;
+        let estimated_tokens = estimate_tokens_for_text(text);
         (0..estimated_tokens).map(|i| i as u32).collect()
     }
 
@@ -47,11 +88,13 @@ impl Tokenizer for SimpleTokenizer {
     }
 
     fn count_tokens(&self, text: &str) -> usize {
-        // Heuristic: ~4 characters per token (GPT average)
-        // Also count words as minimum
-        let char_estimate = (text.len() as f32 / 4.0).ceil() as usize;
+        // Language-aware heuristic:
+        // - CJK (Korean/Chinese/Japanese): ~2 tokens per character (each char is its own token)
+        // - Latin/ASCII/other: ~4 characters per token (GPT average)
+        // Also count words as minimum for Latin text
+        let token_estimate = estimate_tokens_for_text(text);
         let word_count = text.split_whitespace().count();
-        char_estimate.max(word_count)
+        token_estimate.max(word_count)
     }
 }
 

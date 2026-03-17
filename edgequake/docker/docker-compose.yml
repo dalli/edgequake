@@ -26,8 +26,13 @@ services:
       # On macOS/Windows Docker Desktop, host.docker.internal resolves to the host.
       # On Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` below.
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-      - EDGEQUAKE_LLM_PROVIDER=${EDGEQUAKE_LLM_PROVIDER:-ollama}
-      - EDGEQUAKE_EMBEDDING_PROVIDER=${EDGEQUAKE_EMBEDDING_PROVIDER:-}
+      - EDGEQUAKE_LLM_PROVIDER=${EDGEQUAKE_DEFAULT_LLM_PROVIDER:-ollama}
+      - EDGEQUAKE_LLM_MODEL=${EDGEQUAKE_DEFAULT_LLM_MODEL:-gemma3:12b}
+      - EDGEQUAKE_EMBEDDING_PROVIDER=${EDGEQUAKE_DEFAULT_EMBEDDING_PROVIDER:-ollama}
+      - EDGEQUAKE_EMBEDDING_MODEL=${EDGEQUAKE_DEFAULT_EMBEDDING_MODEL:-embeddinggemma}
+      - EDGEQUAKE_EMBEDDING_DIMENSION=${EDGEQUAKE_DEFAULT_EMBEDDING_DIMENSION:-768}
+      - EDGEQUAKE_VISION_PROVIDER=${EDGEQUAKE_VISION_PROVIDER:-openai}
+      - EDGEQUAKE_VISION_MODEL=${EDGEQUAKE_VISION_MODEL:-gpt-4o-mini}
       # Vision extraction timeout (seconds). Default 600s (10 min).
       - EDGEQUAKE_VISION_TIMEOUT_SECS=${EDGEQUAKE_VISION_TIMEOUT_SECS:-600}
       - RUST_LOG=info,edgequake=debug
@@ -111,6 +116,14 @@ services:
     restart: unless-stopped
     ports:
       - "28000:8000"
+    environment:
+      # OCR language codes (comma-separated). Default: "ko,en" for Korean + English.
+      # Set to "en" for English-only, "ja,en" for Japanese, "zh,en" for Chinese.
+      - OCR_LANGUAGES=${OCR_LANGUAGES:-ko,en}
+      # Language name for VLM image analysis responses. Default: "Korean".
+      # Set to "English" if documents are English-only.
+      - VLM_RESPONSE_LANGUAGE=${VLM_RESPONSE_LANGUAGE:-Korean}
+      - VLM_MODEL_NAME=${VLM_MODEL_NAME:-Qwen/Qwen2-VL-7B-Instruct}
     networks:
       - edgequake-network
 

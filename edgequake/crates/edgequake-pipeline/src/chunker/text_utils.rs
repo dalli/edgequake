@@ -33,15 +33,34 @@ pub fn calculate_line_numbers(
     (start_line, end_line)
 }
 
-/// Estimate token count (rough approximation: 1 token ≈ 4 chars).
+/// Estimate token count with language awareness.
+///
+/// - CJK characters (Korean/Chinese/Japanese): ~2 tokens per character
+/// - Latin/ASCII text: ~4 characters per token (GPT average)
 pub(super) fn estimate_tokens(text: &str) -> usize {
-    (text.len() as f32 / 4.0).ceil() as usize
+    let mut cjk_tokens = 0usize;
+    let mut latin_bytes = 0usize;
+    for c in text.chars() {
+        // CJK Unified Ideographs, Hangul Syllables, Hiragana, Katakana
+        if matches!(c,
+            '\u{1100}'..='\u{11FF}' | '\u{3040}'..='\u{30FF}' |
+            '\u{3130}'..='\u{318F}' | '\u{4E00}'..='\u{9FFF}' |
+            '\u{AC00}'..='\u{D7FF}' | '\u{F900}'..='\u{FAFF}'
+        ) {
+            cjk_tokens += 2;
+        } else {
+            latin_bytes += c.len_utf8();
+        }
+    }
+    let latin_tokens = (latin_bytes as f32 / 4.0).ceil() as usize;
+    (cjk_tokens + latin_tokens).max(1)
 }
 
 /// Split text into sentences using simple heuristics.
 ///
 /// WHY: Avoids splitting on common abbreviations (Dr., Mr., Inc., etc.)
 /// while still detecting sentence boundaries at '.', '!', '?' characters.
+/// Also handles full-width CJK punctuation (。！？…) used in Korean/Japanese/Chinese text.
 pub(super) fn split_into_sentences(text: &str) -> Vec<String> {
     let mut sentences = Vec::new();
     let mut current = String::new();
@@ -49,22 +68,35 @@ pub(super) fn split_into_sentences(text: &str) -> Vec<String> {
     for c in text.chars() {
         current.push(c);
 
-        // Check for sentence endings (simple heuristic)
-        if c == '.' || c == '!' || c == '?' {
-            // Avoid splitting on abbreviations like "Dr." "Mr." "Inc."
-            let trimmed = current.trim();
-            if trimmed.len() >= 3 {
-                // Check if previous word is an abbreviation
-                let words: Vec<&str> = trimmed.split_whitespace().collect();
-                if let Some(last_word) = words.last() {
-                    let abbrevs = [
-                        "Dr.", "Mr.", "Mrs.", "Ms.", "Jr.", "Sr.", "Inc.", "Ltd.", "etc.", "vs.",
-                        "e.g.", "i.e.", "No.", "St.",
-                    ];
-                    if !abbrevs.contains(last_word) {
-                        sentences.push(current.trim().to_string());
-                        current = String::new();
+        // Check for sentence endings:
+        // - ASCII: '.', '!', '?'
+        // - CJK full-width: '。', '！', '？' (Korean/Japanese/Chinese)
+        // - Ellipsis: '…' (used in Korean text)
+        let is_sentence_end = matches!(c, '.' | '!' | '?' | '。' | '！' | '？' | '…');
+
+        if is_sentence_end {
+            // For ASCII period, avoid splitting on common abbreviations
+            if c == '.' {
+                let trimmed = current.trim();
+                if trimmed.len() >= 3 {
+                    let words: Vec<&str> = trimmed.split_whitespace().collect();
+                    if let Some(last_word) = words.last() {
+                        let abbrevs = [
+                            "Dr.", "Mr.", "Mrs.", "Ms.", "Jr.", "Sr.", "Inc.", "Ltd.", "etc.", "vs.",
+                            "e.g.", "i.e.", "No.", "St.",
+                        ];
+                        if !abbrevs.contains(last_word) {
+                            sentences.push(current.trim().to_string());
+                            current = String::new();
+                        }
                     }
+                }
+            } else {
+                // For all other sentence-end chars (including CJK), always split
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    sentences.push(trimmed.to_string());
+                    current = String::new();
                 }
             }
         }
