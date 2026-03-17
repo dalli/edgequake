@@ -324,21 +324,21 @@ check-deps: ## Check that required dependencies are installed
 	@command -v docker >/dev/null 2>&1 || { echo "$(YELLOW)⚠️  docker not found. Some features require Docker$(RESET)"; }
 	@echo "$(GREEN)✓ All required dependencies found$(RESET)"
 
-check-ports: ## Check and clear ports 8080 and 3000 if in use
-	@echo "$(BLUE)Checking ports 8080 and 3000...$(RESET)"
-	@PORT_8080=$$(lsof -ti:8080 2>/dev/null || true); \
-	PORT_3000=$$(lsof -ti:3000 2>/dev/null || true); \
-	if [ -n "$$PORT_8080" ]; then \
-		echo "$(YELLOW)⚠️  Port 8080 in use by PID $$PORT_8080 - killing...$(RESET)"; \
-		kill -9 $$PORT_8080 2>/dev/null || true; \
+check-ports: ## Check and clear ports 28080 and 23000 if in use
+	@echo "$(BLUE)Checking ports 28080 and 23000...$(RESET)"
+	@PORT_28080=$$(lsof -ti:28080 2>/dev/null || true); \
+	PORT_23000=$$(lsof -ti:23000 2>/dev/null || true); \
+	if [ -n "$$PORT_28080" ]; then \
+		echo "$(YELLOW)⚠️  Port 28080 in use by PID $$PORT_28080 - killing...$(RESET)"; \
+		kill -9 $$PORT_28080 2>/dev/null || true; \
 		sleep 1; \
 	fi; \
-	if [ -n "$$PORT_3000" ]; then \
-		echo "$(YELLOW)⚠️  Port 3000 in use by PID $$PORT_3000 - killing...$(RESET)"; \
-		kill -9 $$PORT_3000 2>/dev/null || true; \
+	if [ -n "$$PORT_23000" ]; then \
+		echo "$(YELLOW)⚠️  Port 23000 in use by PID $$PORT_23000 - killing...$(RESET)"; \
+		kill -9 $$PORT_23000 2>/dev/null || true; \
 		sleep 1; \
 	fi
-	@echo "$(GREEN)✓ Ports 8080 and 3000 are available$(RESET)"
+	@echo "$(GREEN)✓ Ports 28080 and 23000 are available$(RESET)"
 
 # ============================================================================
 # Installation
@@ -383,9 +383,9 @@ dev: check-deps check-ports ## Start full development stack (DB + Backend + Fron
 	@$(MAKE) db-start --no-print-directory
 	@echo ""
 	@echo "$(YELLOW)→ Starting services in parallel...$(RESET)"
-	@echo "  $(BLUE)Backend$(RESET):  http://localhost:8080"
-	@echo "  $(BLUE)Frontend$(RESET): http://localhost:3000"
-	@echo "  $(BLUE)Swagger$(RESET):  http://localhost:8080/swagger-ui"
+	@echo "  $(BLUE)Backend$(RESET):  http://localhost:28080"
+	@echo "  $(BLUE)Frontend$(RESET): http://localhost:23000"
+	@echo "  $(BLUE)Swagger$(RESET):  http://localhost:28080/swagger-ui"
 	@if [ -n "$(OPENAI_API_KEY)" ]; then \
 		echo "  $(BLUE)Provider$(RESET): OpenAI"; \
 	else \
@@ -398,7 +398,7 @@ dev: check-deps check-ports ## Start full development stack (DB + Backend + Fron
 	@trap 'echo ""; echo "$(YELLOW)Stopping services...$(RESET)"; $(MAKE) stop --no-print-directory; exit 0' INT; \
 	if [ -n "$(OPENAI_API_KEY)" ]; then \
 		(cd $(BACKEND_DIR) && \
-			DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:5432/edgequake" \
+			DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:25432/edgequake" \
 			OPENAI_API_KEY="$(OPENAI_API_KEY)" \
 			EDGEQUAKE_LLM_PROVIDER="openai" \
 			EDGEQUAKE_VISION_PROVIDER="$(EDGEQUAKE_VISION_PROVIDER)" \
@@ -407,7 +407,7 @@ dev: check-deps check-ports ## Start full development stack (DB + Backend + Fron
 		BACKEND_PID=$$!; \
 	else \
 		(cd $(BACKEND_DIR) && \
-			DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:5432/edgequake" \
+			DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:25432/edgequake" \
 			EDGEQUAKE_LLM_PROVIDER="$(EDGEQUAKE_DEFAULT_LLM_PROVIDER)" \
 			EDGEQUAKE_VISION_PROVIDER="$(EDGEQUAKE_VISION_PROVIDER)" \
 			EDGEQUAKE_VISION_MODEL="$(EDGEQUAKE_VISION_MODEL)" \
@@ -489,9 +489,9 @@ dev-bg: check-deps check-ports ## Start full development stack in BACKGROUND (ag
 	@sleep 3
 	@echo "$(BOLD)$(GREEN)✅ EdgeQuake Background Stack Started$(RESET)"
 	@echo ""
-	@echo "  $(BLUE)Backend$(RESET):  http://localhost:8080"
-	@echo "  $(BLUE)Frontend$(RESET): http://localhost:3000"
-	@echo "  $(BLUE)Swagger$(RESET):  http://localhost:8080/swagger-ui"
+	@echo "  $(BLUE)Backend$(RESET):  http://localhost:28080"
+	@echo "  $(BLUE)Frontend$(RESET): http://localhost:23000"
+	@echo "  $(BLUE)Swagger$(RESET):  http://localhost:28080/swagger-ui"
 	@if [ -n "$(OPENAI_API_KEY)" ]; then \
 		echo "  $(BLUE)LLM Provider$(RESET): openai (gpt-5-nano)"; \
 		echo "  $(BLUE)Embedding$(RESET): openai (text-embedding-3-small, 1536d)"; \
@@ -511,15 +511,15 @@ stop: ## Stop all development services
 	@-pkill -9 -f "edgequake-api" 2>/dev/null || true
 	@-pkill -9 -f "target/debug/edgequake" 2>/dev/null || true
 	@-pkill -9 -f "target/release/edgequake" 2>/dev/null || true
-	@# OODA-256: Force-kill any process on port 8080
-	@-lsof -ti:8080 | xargs -r kill -9 2>/dev/null || true
+	@# OODA-256: Force-kill any process on port 28080
+	@-lsof -ti:28080 | xargs -r kill -9 2>/dev/null || true
 	@echo "$(BLUE)→ Stopping frontend processes...$(RESET)"
 	@-pkill -f "next dev" 2>/dev/null || true
 	@-pkill -f "node.*edgequake_webui" 2>/dev/null || true
 	@-pkill -9 -f "bun.*dev" 2>/dev/null || true
 	@-pkill -9 -f "next-server" 2>/dev/null || true
-	@# OODA-256: Force-kill any process on port 3000
-	@-lsof -ti:3000 | xargs -r kill -9 2>/dev/null || true
+	@# OODA-256: Force-kill any process on port 23000
+	@-lsof -ti:23000 | xargs -r kill -9 2>/dev/null || true
 	@echo "$(BLUE)→ Stopping database...$(RESET)"
 	@$(MAKE) db-stop --no-print-directory 2>/dev/null || true
 	@sleep 1
@@ -530,7 +530,7 @@ stop: ## Stop all development services
 # ============================================================================
 
 # Database URL for PostgreSQL mode
-DATABASE_URL := postgresql://edgequake:edgequake_secret@localhost:5432/edgequake
+DATABASE_URL := postgresql://edgequake:edgequake_secret@localhost:25432/edgequake
 
 # SPEC-040 v0.4.1: pdfium is now EMBEDDED in the edgequake-pdf2md 0.4.1 binary
 # via pdfium-auto at compile time. No external libpdfium.dylib, no env vars needed.
@@ -623,14 +623,14 @@ backend-build: ## Build backend for release (offline mode)
 backend-build-online: db-start ## Build backend with live database verification
 	@echo "$(BLUE)Building backend with live DB verification...$(RESET)"
 	@cd $(BACKEND_DIR) && \
-		DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:5432/edgequake" \
+		DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:25432/edgequake" \
 		cargo build --release
 	@echo "$(GREEN)✓ Backend built with DB verification$(RESET)"
 
 backend-sqlx-prepare: db-start ## Generate SQLx metadata for offline builds
 	@echo "$(BLUE)Preparing SQLx metadata from database...$(RESET)"
 	@cd $(BACKEND_DIR) && \
-		DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:5432/edgequake" \
+		DATABASE_URL="postgresql://edgequake:edgequake_secret@localhost:25432/edgequake" \
 		cargo sqlx prepare --workspace
 	@echo "$(GREEN)✓ SQLx metadata prepared in .sqlx/$(RESET)"
 
@@ -779,20 +779,20 @@ docker-up: ## Start full stack via Docker Compose
 	@echo "$(BOLD)📍 Access Points:$(RESET)"
 	@echo ""
 	@echo "  $(BLUE)Frontend (Web UI)$(RESET)"
-	@echo "    🌐 URL: $(BOLD)http://localhost:3000$(RESET)"
+	@echo "    🌐 URL: $(BOLD)http://localhost:23000$(RESET)"
 	@echo "    📝 Navigate here to upload documents and interact with the knowledge graph"
 	@echo ""
 	@echo "  $(BLUE)Backend API$(RESET)"
-	@echo "    🔗 URL: $(BOLD)http://localhost:8080$(RESET)"
-	@echo "    📚 Swagger UI: $(BOLD)http://localhost:8080/swagger-ui$(RESET)"
-	@echo "    🏥 Health: $(BOLD)http://localhost:8080/health$(RESET)"
+	@echo "    🔗 URL: $(BOLD)http://localhost:28080$(RESET)"
+	@echo "    📚 Swagger UI: $(BOLD)http://localhost:28080/swagger-ui$(RESET)"
+	@echo "    🏥 Health: $(BOLD)http://localhost:28080/health$(RESET)"
 	@echo ""
 	@echo "  $(BLUE)Database$(RESET)"
 	@echo "    🗄️  PostgreSQL on port 5432"
 	@echo "    👤 User: edgequake"
 	@echo ""
 	@echo "$(YELLOW)→ First Time:$(RESET)"
-	@echo "  1. Open http://localhost:3000 in your browser"
+	@echo "  1. Open http://localhost:23000 in your browser"
 	@echo "  2. Upload a PDF document from the File menu"
 	@echo "  3. Wait for entity extraction to complete"
 	@echo "  4. View the knowledge graph and extracted entities"
@@ -896,12 +896,12 @@ test-flaky: ## Run flaky test detection (3 iterations)
 
 test-e2e-critical: ## Run E2E critical path tests
 	@echo "$(BLUE)Running E2E critical path tests...$(RESET)"
-	@cd $(FRONTEND_DIR) && PLAYWRIGHT_BASE_URL=http://localhost:3000 \
+	@cd $(FRONTEND_DIR) && PLAYWRIGHT_BASE_URL=http://localhost:23000 \
 		pnpm exec playwright test ooda-228-critical-path.spec.ts --reporter=line
 
 test-e2e-full: ## Run full E2E test suite
 	@echo "$(BLUE)Running full E2E suite...$(RESET)"
-	@cd $(FRONTEND_DIR) && PLAYWRIGHT_BASE_URL=http://localhost:3000 \
+	@cd $(FRONTEND_DIR) && PLAYWRIGHT_BASE_URL=http://localhost:23000 \
 		pnpm exec playwright test --reporter=line
 
 test-stability-report: ## Generate test stability report
@@ -1026,8 +1026,8 @@ rebuild: ## Full rebuild: stop + clean + dev (ensures latest code is running)
 	@echo "$(YELLOW)→ Killing any stale processes...$(RESET)"
 	@-pkill -9 -f "target/debug/edgequake" 2>/dev/null || true
 	@-pkill -9 -f "target/release/edgequake" 2>/dev/null || true
-	@-lsof -ti:8080 | xargs kill -9 2>/dev/null || true
-	@-lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+	@-lsof -ti:28080 | xargs kill -9 2>/dev/null || true
+	@-lsof -ti:23000 | xargs kill -9 2>/dev/null || true
 	@sleep 2
 	@echo "$(YELLOW)→ Cleaning build artifacts...$(RESET)"
 	@$(MAKE) clean --no-print-directory
@@ -1040,7 +1040,7 @@ rebuild: ## Full rebuild: stop + clean + dev (ensures latest code is running)
 
 swagger: ## Open Swagger UI in browser
 	@echo "$(BLUE)Opening Swagger UI...$(RESET)"
-	@open http://localhost:8080/swagger-ui 2>/dev/null || xdg-open http://localhost:8080/swagger-ui 2>/dev/null || echo "Open http://localhost:8080/swagger-ui in your browser"
+	@open http://localhost:28080/swagger-ui 2>/dev/null || xdg-open http://localhost:28080/swagger-ui 2>/dev/null || echo "Open http://localhost:28080/swagger-ui in your browser"
 
 logs: ## Show recent logs from all services
 	@echo "$(BOLD)Recent Backend Logs:$(RESET)"
@@ -1055,11 +1055,11 @@ status: ## Show status of all services
 	@echo "========================="
 	@echo ""
 	@echo "$(BOLD)Backend:$(RESET)"
-	@curl -s http://localhost:8080/health | jq . 2>/dev/null || echo "  $(RED)Not running$(RESET)"
+	@curl -s http://localhost:28080/health | jq . 2>/dev/null || echo "  $(RED)Not running$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Frontend:$(RESET)"
-	@curl -s http://localhost:3000 >/dev/null 2>&1 && echo "  $(GREEN)Running on http://localhost:3000$(RESET)" || echo "  $(RED)Not running$(RESET)"
+	@curl -s http://localhost:23000 >/dev/null 2>&1 && echo "  $(GREEN)Running on http://localhost:23000$(RESET)" || echo "  $(RED)Not running$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Database:$(RESET)"
-	@docker exec edgequake-postgres pg_isready -U edgequake -d edgequake 2>/dev/null && echo "  $(GREEN)Running on localhost:5432$(RESET)" || echo "  $(RED)Not running$(RESET)"
+	@docker exec edgequake-postgres pg_isready -U edgequake -d edgequake 2>/dev/null && echo "  $(GREEN)Running on localhost:25432$(RESET)" || echo "  $(RED)Not running$(RESET)"
 	@echo ""
