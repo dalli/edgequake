@@ -2,100 +2,86 @@ import os
 import logging
 from typing import Tuple
 
-# Docling imports
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.datamodel.document import ConversionResult
+import fitz  # PyMuPDF
+from PIL import Image
+import io
 
 logger = logging.getLogger(__name__)
 
-# Language configuration for OCR.
-# Set OCR_LANGUAGES env var to a comma-separated list of language codes.
-# Examples: "ko,en" (Korean + English), "ja,en" (Japanese + English), "zh,en" (Chinese + English)
-# Default: "ko,en" to support Korean documents out of the box.
-_OCR_LANGUAGES = [
-    lang.strip()
-    for lang in os.getenv("OCR_LANGUAGES", "ko,en").split(",")
-    if lang.strip()
-]
+# Resolution for rendering PDF pages to images.
+# 150 DPI is a good balance between VLM accuracy and memory use.
+# Increase to 200+ for dense tables with small text.
+_RENDER_DPI = int(os.getenv("PDF_RENDER_DPI", "150"))
+
+# Maximum number of pages to process (0 = unlimited).
+_MAX_PAGES = int(os.getenv("PDF_MAX_PAGES", "0"))
 
 
-def get_converter() -> DocumentConverter:
-    """
-    Initializes and returns a configured Docling DocumentConverter.
-    Configured for high precision table extraction and multi-language OCR.
-
-    OCR language is controlled by the OCR_LANGUAGES environment variable.
-    Default: "ko,en" (Korean + English).
-    """
-    pipeline_options = PdfPipelineOptions()
-    pipeline_options.do_ocr = True
-    pipeline_options.do_table_structure = True
-
-    # Configure OCR languages for multi-language support (including Korean)
-    try:
-        from docling.datamodel.pipeline_options import EasyOcrOptions
-        pipeline_options.ocr_options = EasyOcrOptions(lang=_OCR_LANGUAGES)
-        logger.info(f"OCR configured with languages: {_OCR_LANGUAGES}")
-    except (ImportError, AttributeError):
-        # Older versions of docling may not support EasyOcrOptions
-        logger.warning(
-            "EasyOcrOptions not available in this docling version. "
-            f"OCR language may default to English only. "
-            f"Requested: {_OCR_LANGUAGES}"
-        )
-
-    converter = DocumentConverter(
-        format_options={
-            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-        }
-    )
-    return converter
+def _pdf_page_to_image(page: fitz.Page, dpi: int = _RENDER_DPI) -> Image.Image:
+    """Render a single PDF page to a PIL Image at the given DPI."""
+    zoom = dpi / 72.0
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat, alpha=False)
+    return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
 
 
 def process_pdf(file_path: str) -> Tuple[str, int, list]:
     """
-    Processes a PDF file using Docling, extracts images, runs them through the VLM,
-    and injects the VLM descriptions back into the final Markdown.
+    Process a PDF file using VLM page-by-page extraction.
+
+    Pipeline:
+    1. Each page is rendered to an image via PyMuPDF at PDF_RENDER_DPI resolution.
+    2. The VLM extracts structured content (text, tables with colspan/rowspan, charts)
+       and returns JSON per the SYSTEM_PROMPT schema defined in vlm.py.
+    3. Cross-page table continuation is tracked: if a page ended with an incomplete
+       table, the next page's VLM call is told to treat its first element as a
+       potential continuation.
+    4. All pages are assembled into a single Markdown document.
+
+    Environment variables:
+      PDF_RENDER_DPI       - Page image resolution (default: 150)
+      PDF_MAX_PAGES        - Max pages to process; 0 = unlimited (default: 0)
+      VLM_RESPONSE_LANGUAGE - Output language (default: Korean)
     """
-    logger.info(f"Starting Docling conversion for: {file_path}")
-    converter = get_converter()
+    from vlm import analyze_page_with_vlm
 
-    # Run conversion
-    result = converter.convert(file_path)
-    document = result.document
-    page_count = len(result.input.pages) if getattr(result.input, 'pages', None) else 0
+    logger.info(f"Opening PDF: {file_path} (DPI={_RENDER_DPI})")
 
-    # Enable image exporting in docling to extract bounding box images
-    vlm_descriptions = {}
+    doc = fitz.open(file_path)
+    total_pages = len(doc)
+    max_pages = _MAX_PAGES if _MAX_PAGES > 0 else total_pages
+    pages_to_process = min(total_pages, max_pages)
 
-    # Lazy load VLM function
-    from vlm import analyze_image_with_vlm
+    logger.info(f"PDF has {total_pages} pages, processing {pages_to_process}")
 
-    # Process each picture found in the document
-    if hasattr(document, 'pictures'):
-        for pic in document.pictures:
-            try:
-                # Some docling versions support extracting PIL image directly
-                img = pic.get_image(document)
-                if img:
-                    logger.info(f"Analyzing image/chart at page {pic.prov[0].page_no} with VLM...")
-                    vlm_text = analyze_image_with_vlm(img)
-                    vlm_descriptions[pic.get_ref().id_] = vlm_text
-            except Exception as e:
-                logger.warning(f"Failed to process image with VLM: {str(e)}")
+    markdown_parts = [f"# Document\n\n*Total pages: {pages_to_process}*\n"]
 
-    # Export to markdown.
-    markdown = document.export_to_markdown()
+    # Track whether the previous page ended with a table that continues
+    prev_page_continues = False
 
-    # Inject VLM descriptions into the markdown
-    if vlm_descriptions:
-        markdown += "\n\n## Visual Elements Analysis (VLM)\n\n"
-        for ref_id, desc in vlm_descriptions.items():
-            markdown += f"### Element {ref_id}\n{desc}\n\n"
+    for page_num in range(pages_to_process):
+        page = doc[page_num]
+        logger.info(f"Processing page {page_num + 1}/{pages_to_process} (prev_continues={prev_page_continues})")
 
-    logger.info(f"Two-Track conversion complete. Pages: {page_count}, VLM Elements processed: {len(vlm_descriptions)}")
+        try:
+            img = _pdf_page_to_image(page, dpi=_RENDER_DPI)
+            page_content, continues_to_next = analyze_page_with_vlm(
+                img,
+                page_number=page_num + 1,
+                prev_page_continues=prev_page_continues,
+            )
+            prev_page_continues = continues_to_next
+            markdown_parts.append(f"\n\n---\n\n<!-- page {page_num + 1} -->\n\n{page_content}")
 
-    elements = getattr(document, "texts", []) + getattr(document, "pictures", []) + getattr(document, "tables", [])
-    return markdown, page_count, elements
+        except Exception as e:
+            logger.warning(f"Failed to process page {page_num + 1}: {e}")
+            markdown_parts.append(
+                f"\n\n---\n\n<!-- page {page_num + 1} -->\n\n*[페이지 추출 실패: {e}]*"
+            )
+            prev_page_continues = False
+
+    doc.close()
+
+    markdown = "\n".join(markdown_parts)
+    logger.info(f"VLM processing complete: {pages_to_process} pages")
+    return markdown, pages_to_process, []
