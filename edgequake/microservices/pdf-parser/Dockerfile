@@ -1,5 +1,5 @@
-# Use an official PyTorch runtime as a parent image, which includes CUDA Toolkit
-FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+# Use python slim which has multi-arch support (linux/amd64 and linux/arm64)
+FROM python:3.11-slim
 
 # Set non-interactive timezone
 ENV DEBIAN_FRONTEND=noninteractive

@@ -107,7 +107,6 @@ services:
   pdf-parser:
     build:
       context: ../microservices/pdf-parser
-    platform: linux/amd64
     container_name: pdf-parser
     restart: unless-stopped
     ports:
